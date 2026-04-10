@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session, TrialResponse } from '@/types';
 
-const ACTIVE_KEY = 'letter-id:active';
+export const ACTIVE_KEY = 'letter-id:active';
 const HISTORY_KEY = 'letter-id:history';
 
 export function loadActive(): Session | null {

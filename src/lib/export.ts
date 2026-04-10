@@ -1,5 +1,18 @@
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  Table,
+  TableRow,
+  TableCell,
+  TextRun,
+  WidthType,
+  HeadingLevel,
+  ShadingType,
+} from 'docx';
+import { saveAs } from 'file-saver';
 import type { Condition, Session } from '@/types';
 import { computeResults } from '@/lib/scoring';
 
@@ -31,7 +44,7 @@ function csvEscape(value: string): string {
 }
 
 export function downloadCsv(session: Session): void {
-  const header = ['studentName', 'date', 'mode', 'letter', 'case', 'condition', 'response', 'note', 'timestamp'];
+  const header = ['studentName', 'date', 'mode', 'letter', 'case', 'condition', 'response', 'note', 'sessionDate'];
   const rows = [header.join(',')];
   const mode = session.mode ?? 'baseline';
   for (const trial of session.trials) {
@@ -243,4 +256,239 @@ export function downloadPdf(session: Session): void {
 
   const name = `letter-id_${slug(session.studentName)}_${isoDatePart(session.date)}.pdf`;
   doc.save(name);
+}
+
+// --- Word (DOCX) export ---
+
+const HEADER_SHADING = { type: ShadingType.SOLID, color: '1e293b' };
+const HEADER_TEXT_COLOR = 'ffffff';
+
+function wordHeaderCell(text: string): TableCell {
+  return new TableCell({
+    children: [new Paragraph({
+      children: [new TextRun({ text, bold: true, size: 18, color: HEADER_TEXT_COLOR, font: 'Calibri' })],
+    })],
+    shading: HEADER_SHADING,
+  });
+}
+
+function wordCell(text: string, bold = false): TableCell {
+  return new TableCell({
+    children: [new Paragraph({
+      children: [new TextRun({ text, bold, size: 18, font: 'Calibri' })],
+    })],
+  });
+}
+
+export async function downloadWord(session: Session): Promise<void> {
+  const mode = session.mode ?? 'baseline';
+  const results = computeResults(session);
+  const { perCondition, filled, hollow, gap, flags, errors } = results;
+
+  const testedConditions: Condition[] = mode === 'baseline'
+    ? ['regular', 'bold', 'hollow']
+    : (['regular', 'bold', 'hollow'] as Condition[]).filter(c =>
+        session.trials.some(t => t.condition === c));
+  const hasAllConds = testedConditions.length === 3;
+  const hasRegularAndBold = testedConditions.includes('regular') && testedConditions.includes('bold');
+  const hasHollow = testedConditions.includes('hollow');
+  const caseSet = session.caseSet;
+
+  const sections: (Paragraph | Table)[] = [];
+
+  // --- Title ---
+  sections.push(new Paragraph({
+    heading: HeadingLevel.HEADING_1,
+    children: [new TextRun({ text: 'Letter Identification Assessment', bold: true, font: 'Calibri' })],
+  }));
+  sections.push(new Paragraph({
+    children: [new TextRun({
+      text: `${mode === 'fluency' ? 'Fluency' : 'Baseline'} Report`,
+      size: 24,
+      color: '64748b',
+      font: 'Calibri',
+    })],
+    spacing: { after: 200 },
+  }));
+
+  // --- Session info ---
+  const infoLines = [
+    `Student: ${session.studentName}`,
+    `Date: ${isoDatePart(session.date)}`,
+    `Mode: ${mode}  |  Case: ${caseSet}  |  Order: ${session.adminMode}${session.randomized ? '  |  Randomized' : ''}`,
+    `Trials: ${session.trials.length}  |  Answered: ${Object.keys(session.responses).length}${session.endedEarly ? '  |  Ended early' : ''}`,
+  ];
+  if (mode === 'fluency' && session.selectedConditions) {
+    infoLines.push(`Conditions: ${session.selectedConditions.join(', ')}`);
+  }
+  if (mode === 'fluency' && session.selectedLetters) {
+    infoLines.push(`Letters: ${session.selectedLetters.join(' ')}`);
+  }
+  for (const line of infoLines) {
+    sections.push(new Paragraph({
+      children: [new TextRun({ text: line, size: 20, font: 'Calibri' })],
+      spacing: { after: 40 },
+    }));
+  }
+
+  // --- Score by Condition table ---
+  sections.push(new Paragraph({
+    heading: HeadingLevel.HEADING_2,
+    children: [new TextRun({ text: 'Score by Condition', bold: true, font: 'Calibri' })],
+    spacing: { before: 300, after: 100 },
+  }));
+
+  const scoreHead: string[] = ['Condition'];
+  if (caseSet !== 'lower') scoreHead.push('Upper');
+  if (caseSet !== 'upper') scoreHead.push('Lower');
+  scoreHead.push('Combined', '%');
+
+  const scoreHeaderRow = new TableRow({
+    children: scoreHead.map(h => wordHeaderCell(h)),
+  });
+
+  const scoreBodyRows = testedConditions.map(c => {
+    const cells: string[] = [c.charAt(0).toUpperCase() + c.slice(1)];
+    if (caseSet !== 'lower') cells.push(String(perCondition[c].upper));
+    if (caseSet !== 'upper') cells.push(String(perCondition[c].lower));
+    cells.push(String(perCondition[c].combined), `${perCondition[c].percent.toFixed(0)}%`);
+    return new TableRow({
+      children: cells.map((text, i) => wordCell(text, i === 0)),
+    });
+  });
+
+  sections.push(new Table({
+    rows: [scoreHeaderRow, ...scoreBodyRows],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  }));
+
+  // --- Filled / Hollow / Gap summary ---
+  if (hasRegularAndBold && hasHollow) {
+    sections.push(new Paragraph({
+      children: [new TextRun({
+        text: `Filled (Regular + Bold):  ${filled.correct} / ${filled.total}  (${filled.percent.toFixed(0)}%)`,
+        size: 20,
+        font: 'Calibri',
+      })],
+      spacing: { before: 200, after: 40 },
+    }));
+    sections.push(new Paragraph({
+      children: [new TextRun({
+        text: `Hollow:  ${hollow.correct} / ${hollow.total}  (${hollow.percent.toFixed(0)}%)`,
+        size: 20,
+        font: 'Calibri',
+      })],
+      spacing: { after: 40 },
+    }));
+    const gapStr = `${gap >= 0 ? '+' : ''}${gap.toFixed(1)} pp`;
+    sections.push(new Paragraph({
+      children: [
+        new TextRun({ text: `Filled - Hollow Gap:  ${gapStr}`, size: 20, font: 'Calibri' }),
+        ...(flags.fillDependent ? [new TextRun({
+          text: '  *** FILL-DEPENDENT FLAG ***',
+          bold: true,
+          color: 'dc2626',
+          size: 20,
+          font: 'Calibri',
+        })] : []),
+      ],
+      spacing: { after: 100 },
+    }));
+  }
+
+  // --- Pattern flags ---
+  sections.push(new Paragraph({
+    heading: HeadingLevel.HEADING_2,
+    children: [new TextRun({ text: 'Pattern Flags', bold: true, font: 'Calibri' })],
+    spacing: { before: 300, after: 100 },
+  }));
+
+  const flagItems: { checked: boolean; label: string }[] = [];
+  if (hasAllConds) {
+    flagItems.push({ checked: flags.fillDependent, label: 'Fill-dependent deficit (hollow % >= 15 pp below filled %)' });
+  }
+  if (hasRegularAndBold) {
+    flagItems.push({ checked: flags.weightDependent, label: 'Weight-dependent deficit (regular vs bold differ >= 10 pp)' });
+  }
+  const letterLabel = flags.letterSpecific.length > 0
+    ? `Letter-specific deficit - ${flags.letterSpecific.join(', ')}`
+    : 'Letter-specific deficit';
+  flagItems.push({ checked: flags.letterSpecific.length > 0, label: letterLabel });
+  if (caseSet === 'both') {
+    flagItems.push({ checked: flags.caseSpecific, label: 'Case-specific deficit (upper vs lower differ >= 15 pp)' });
+  }
+
+  for (const f of flagItems) {
+    const mark = f.checked ? '[X]' : '[ ]';
+    sections.push(new Paragraph({
+      children: [
+        new TextRun({ text: `${mark}  `, bold: true, size: 20, font: 'Calibri', color: f.checked ? 'dc2626' : '334155' }),
+        new TextRun({ text: f.label, size: 20, font: 'Calibri', color: f.checked ? 'dc2626' : '334155' }),
+      ],
+      spacing: { after: 60 },
+    }));
+  }
+
+  if (!hasAllConds) {
+    sections.push(new Paragraph({
+      children: [new TextRun({
+        text: 'Note: Not all 3 conditions were tested - some pattern flags require all conditions.',
+        italics: true,
+        size: 16,
+        color: '64748b',
+        font: 'Calibri',
+      })],
+      spacing: { after: 100 },
+    }));
+  }
+
+  // --- Error log ---
+  if (errors.length > 0) {
+    sections.push(new Paragraph({
+      heading: HeadingLevel.HEADING_2,
+      children: [new TextRun({ text: `Error Log (${errors.length})`, bold: true, font: 'Calibri' })],
+      spacing: { before: 300, after: 100 },
+    }));
+
+    const errHead = ['Letter', 'Case', 'Condition', 'Response'];
+    if (mode === 'baseline') errHead.push('Student said');
+
+    const errHeaderRow = new TableRow({
+      children: errHead.map(h => wordHeaderCell(h)),
+    });
+
+    const errBodyRows = errors.map(e => {
+      const cells = [e.letter, e.case, e.condition, e.response === 'nr' ? 'No response' : e.response];
+      if (mode === 'baseline') cells.push(e.said || '-');
+      return new TableRow({
+        children: cells.map(text => wordCell(text)),
+      });
+    });
+
+    sections.push(new Table({
+      rows: [errHeaderRow, ...errBodyRows],
+      width: { size: 100, type: WidthType.PERCENTAGE },
+    }));
+  }
+
+  // --- Footer ---
+  sections.push(new Paragraph({
+    children: [new TextRun({
+      text: `Generated ${new Date().toLocaleString()} - Letter Identification Assessment App`,
+      size: 14,
+      color: '94a3b8',
+      font: 'Calibri',
+    })],
+    spacing: { before: 400 },
+  }));
+
+  const doc = new Document({
+    sections: [{
+      children: sections,
+    }],
+  });
+
+  const blob = await Packer.toBlob(doc);
+  const name = `letter-id_${slug(session.studentName)}_${isoDatePart(session.date)}.docx`;
+  saveAs(blob, name);
 }

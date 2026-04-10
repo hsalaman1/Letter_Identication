@@ -3,18 +3,11 @@ import type { CaseSet, Condition, Session } from '@/types';
 import { UPPER, LOWER, buildFluencyTrialList } from '@/data/letters';
 import { Button } from '@/components/ui/button';
 import { FontPreview } from '@/components/FontPreview';
-import { cn } from '@/lib/utils';
+import { cn, newSessionId } from '@/lib/utils';
 
 interface FluencySetupScreenProps {
   onStart: (session: Session) => void;
   onBack: () => void;
-}
-
-function newSessionId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const ALL_CONDITIONS: { value: Condition; label: string }[] = [

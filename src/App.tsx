@@ -8,14 +8,13 @@ import { FluencyTrialScreen } from '@/components/FluencyTrialScreen';
 import { ResultsScreen } from '@/components/ResultsScreen';
 import { SessionHistory } from '@/components/SessionHistory';
 import {
+  ACTIVE_KEY,
   clearActive,
   loadActive,
   pushToHistory,
 } from '@/hooks/useSession';
 
 type Screen = 'home' | 'setup' | 'fluency-setup' | 'trial' | 'fluency-trial' | 'results' | 'history';
-
-const ACTIVE_KEY = 'letter-id:active';
 
 export function App() {
   const [screen, setScreen] = useState<Screen>('home');
@@ -100,29 +99,24 @@ export function App() {
   // --- Fluency trial handler (record + auto-advance) ---
 
   const handleRecordAndAdvance = useCallback((trialId: string, response: TrialResponse) => {
-    setSession(prev => {
-      if (!prev) return prev;
-      const updated = { ...prev, responses: { ...prev.responses, [trialId]: response } };
-      // Find current trial index to know if we're at the last one.
-      const currentIdx = updated.trials.findIndex(t => t.id === trialId);
-      if (currentIdx >= 0 && currentIdx < updated.trials.length - 1) {
-        // Auto-advance to next.
-        setTrialIndex(currentIdx + 1);
-      } else {
-        // Last trial — auto-finish.
-        const completed: Session = {
-          ...updated,
-          completedAt: new Date().toISOString(),
-          endedEarly: false,
-        };
-        pushToHistory(completed);
-        clearActive();
-        setScreen('results');
-        return completed;
-      }
-      return updated;
-    });
-  }, []);
+    if (!session) return;
+    const updated = { ...session, responses: { ...session.responses, [trialId]: response } };
+    const currentIdx = updated.trials.findIndex(t => t.id === trialId);
+    if (currentIdx >= 0 && currentIdx < updated.trials.length - 1) {
+      setTrialIndex(currentIdx + 1);
+      setSession(updated);
+    } else {
+      const completed: Session = {
+        ...updated,
+        completedAt: new Date().toISOString(),
+        endedEarly: false,
+      };
+      setSession(completed);
+      pushToHistory(completed);
+      clearActive();
+      setScreen('results');
+    }
+  }, [session]);
 
   // --- End / complete ---
 
