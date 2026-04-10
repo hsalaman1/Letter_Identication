@@ -85,8 +85,14 @@ export function computeResults(session: Session): Results {
 
   const gap = filledPercent - hollowPercent;
 
-  // Letter-specific: a letter that was NOT correct in any of its 3 conditions.
-  // Only count letters that had all 3 conditions answered.
+  // Determine which conditions are actually present in the session.
+  const testedConditions = new Set(trials.map(t => t.condition));
+  const hasRegular = testedConditions.has('regular');
+  const hasBold = testedConditions.has('bold');
+  const hasHollow = testedConditions.has('hollow');
+  const conditionCount = testedConditions.size;
+
+  // Letter-specific: a letter wrong/NR in ALL tested conditions.
   const letterIds = new Set(trials.map(t => `${t.case}:${t.letter}`));
   const letterSpecific: string[] = [];
   for (const key of letterIds) {
@@ -95,7 +101,7 @@ export function computeResults(session: Session): Results {
     const answered = forLetter.every(t => responses[t.id] !== undefined);
     if (!answered) continue;
     const allWrong = forLetter.every(t => responses[t.id] !== 'correct');
-    if (allWrong && forLetter.length === 3) letterSpecific.push(letter);
+    if (allWrong && forLetter.length >= conditionCount) letterSpecific.push(letter);
   }
 
   // Case-specific flag: only meaningful when caseSet === 'both'.
@@ -133,8 +139,8 @@ export function computeResults(session: Session): Results {
     hollow: { correct: hollowCorrect, total: hollowDenom, percent: hollowPercent },
     gap,
     flags: {
-      fillDependent: gap >= 15,
-      weightDependent: Math.abs(perCondition.regular.percent - perCondition.bold.percent) >= 10,
+      fillDependent: hasRegular && hasBold && hasHollow && gap >= 15,
+      weightDependent: hasRegular && hasBold && Math.abs(perCondition.regular.percent - perCondition.bold.percent) >= 10,
       letterSpecific,
       caseSpecific,
     },

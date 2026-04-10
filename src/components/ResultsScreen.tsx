@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { Session } from '@/types';
+import type { Condition, Session } from '@/types';
 import { computeResults } from '@/lib/scoring';
 import { downloadCsv, downloadJson } from '@/lib/export';
 import { Button } from '@/components/ui/button';
@@ -19,12 +19,39 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
   const results = useMemo(() => computeResults(session), [session]);
   const { perCondition, filled, hollow, gap, flags, errors } = results;
 
+  const mode = session.mode ?? 'baseline';
   const caseSet = session.caseSet;
+
+  // For fluency sessions, only show conditions that were actually tested.
+  const testedConditions: Condition[] = useMemo(() => {
+    if (mode === 'baseline') return ['regular', 'bold', 'hollow'];
+    const conds = new Set(session.trials.map(t => t.condition));
+    return (['regular', 'bold', 'hollow'] as Condition[]).filter(c => conds.has(c));
+  }, [mode, session.trials]);
+
+  const hasAllConditions = testedConditions.length === 3;
+  const hasRegularAndBold = testedConditions.includes('regular') && testedConditions.includes('bold');
+  const hasHollow = testedConditions.includes('hollow');
+
+  // Count unique letters per case for denominator display.
+  const letterCounts = useMemo(() => {
+    const upper = new Set(session.trials.filter(t => t.case === 'upper').map(t => t.letter)).size;
+    const lower = new Set(session.trials.filter(t => t.case === 'lower').map(t => t.letter)).size;
+    return { upper, lower, total: upper + lower };
+  }, [session.trials]);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <header className="mb-6">
-        <h1 className="text-3xl font-bold text-slate-900">Results</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold text-slate-900">Results</h1>
+          <span className={cn(
+            'rounded px-2 py-0.5 text-xs font-semibold uppercase',
+            mode === 'fluency' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700',
+          )}>
+            {mode}
+          </span>
+        </div>
         <div className="mt-1 text-slate-600">
           <span className="font-semibold">{session.studentName}</span> —{' '}
           {new Date(session.date).toLocaleDateString()} · {session.adminMode} ·{' '}
@@ -41,16 +68,24 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
             <thead>
               <tr className="border-b-2 border-slate-200">
                 <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Condition</th>
-                {caseSet !== 'lower' && <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Upper /26</th>}
-                {caseSet !== 'upper' && <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Lower /26</th>}
+                {caseSet !== 'lower' && (
+                  <th className="py-2 pr-4 text-sm font-semibold text-slate-600">
+                    Upper /{letterCounts.upper}
+                  </th>
+                )}
+                {caseSet !== 'upper' && (
+                  <th className="py-2 pr-4 text-sm font-semibold text-slate-600">
+                    Lower /{letterCounts.lower}
+                  </th>
+                )}
                 <th className="py-2 pr-4 text-sm font-semibold text-slate-600">
-                  Combined {caseSet === 'both' ? '/52' : '/26'}
+                  Combined /{caseSet === 'both' ? letterCounts.total : (caseSet === 'upper' ? letterCounts.upper : letterCounts.lower)}
                 </th>
                 <th className="py-2 pr-4 text-sm font-semibold text-slate-600">%</th>
               </tr>
             </thead>
             <tbody>
-              {(['regular', 'bold', 'hollow'] as const).map(c => (
+              {testedConditions.map(c => (
                 <tr key={c} className="border-b border-slate-100">
                   <td className="py-3 pr-4 font-semibold capitalize text-slate-900">{c}</td>
                   {caseSet !== 'lower' && <td className="py-3 pr-4 tabular-nums">{perCondition[c].upper}</td>}
@@ -63,41 +98,57 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
           </table>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-3">
-          <StatCard label="Filled total" value={`${filled.correct} / ${filled.total}`} sub={fmt(filled.percent)} />
-          <StatCard label="Hollow total" value={`${hollow.correct} / ${hollow.total}`} sub={fmt(hollow.percent)} />
-          <StatCard
-            label="Filled − Hollow gap"
-            value={`${gap >= 0 ? '+' : ''}${gap.toFixed(1)} pp`}
-            sub={flags.fillDependent ? 'Fill-dependent flag' : 'Within normal range'}
-            highlight={flags.fillDependent}
-          />
-        </div>
+        {/* Filled/Hollow/Gap summary — only show when meaningful */}
+        {hasRegularAndBold && hasHollow && (
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <StatCard label="Filled total" value={`${filled.correct} / ${filled.total}`} sub={fmt(filled.percent)} />
+            <StatCard label="Hollow total" value={`${hollow.correct} / ${hollow.total}`} sub={fmt(hollow.percent)} />
+            <StatCard
+              label="Filled − Hollow gap"
+              value={`${gap >= 0 ? '+' : ''}${gap.toFixed(1)} pp`}
+              sub={flags.fillDependent ? 'Fill-dependent flag' : 'Within normal range'}
+              highlight={flags.fillDependent}
+            />
+          </div>
+        )}
       </section>
 
       <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-xl font-bold text-slate-900">Pattern flags</h2>
+
+        {!hasAllConditions && (
+          <p className="mb-3 rounded-lg bg-blue-50 p-3 text-sm text-blue-700">
+            Not all 3 conditions were tested — some pattern flags require all conditions and are hidden.
+          </p>
+        )}
+
         <ul className="space-y-2">
-          <FlagRow
-            checked={flags.fillDependent}
-            label="Fill-dependent deficit"
-            detail="Hollow % is ≥15 pp below filled %"
-          />
-          <FlagRow
-            checked={flags.weightDependent}
-            label="Weight-dependent deficit"
-            detail="Regular % and Bold % differ by ≥10 pp"
-          />
+          {hasAllConditions && (
+            <FlagRow
+              checked={flags.fillDependent}
+              label="Fill-dependent deficit"
+              detail="Hollow % is ≥15 pp below filled %"
+            />
+          )}
+          {hasRegularAndBold && (
+            <FlagRow
+              checked={flags.weightDependent}
+              label="Weight-dependent deficit"
+              detail="Regular % and Bold % differ by ≥10 pp"
+            />
+          )}
           <FlagRow
             checked={flags.letterSpecific.length > 0}
             label={`Letter-specific deficit${flags.letterSpecific.length > 0 ? ` — ${flags.letterSpecific.join(', ')}` : ''}`}
-            detail="Letter was incorrect/NR in all 3 conditions"
+            detail={`Letter was incorrect/NR in all ${testedConditions.length} tested condition${testedConditions.length !== 1 ? 's' : ''}`}
           />
-          <FlagRow
-            checked={flags.caseSpecific}
-            label="Case-specific deficit"
-            detail="Upper vs lower overall accuracy differ by ≥15 pp"
-          />
+          {caseSet === 'both' && (
+            <FlagRow
+              checked={flags.caseSpecific}
+              label="Case-specific deficit"
+              detail="Upper vs lower overall accuracy differ by ≥15 pp"
+            />
+          )}
         </ul>
       </section>
 
@@ -112,7 +163,9 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
                   <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Case</th>
                   <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Condition</th>
                   <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Response</th>
-                  <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Student said</th>
+                  {mode === 'baseline' && (
+                    <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Student said</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -122,7 +175,9 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
                     <td className="py-2 pr-4 capitalize text-slate-600">{e.case}</td>
                     <td className="py-2 pr-4 capitalize text-slate-600">{e.condition}</td>
                     <td className="py-2 pr-4 capitalize text-slate-600">{e.response === 'nr' ? 'No response' : e.response}</td>
-                    <td className="py-2 pr-4 text-slate-900">{e.said || <span className="text-slate-400">—</span>}</td>
+                    {mode === 'baseline' && (
+                      <td className="py-2 pr-4 text-slate-900">{e.said || <span className="text-slate-400">—</span>}</td>
+                    )}
                   </tr>
                 ))}
               </tbody>

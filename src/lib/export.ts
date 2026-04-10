@@ -28,14 +28,16 @@ function csvEscape(value: string): string {
 }
 
 export function downloadCsv(session: Session): void {
-  const header = ['studentName', 'date', 'letter', 'case', 'condition', 'response', 'note', 'timestamp'];
+  const header = ['studentName', 'date', 'mode', 'letter', 'case', 'condition', 'response', 'note', 'timestamp'];
   const rows = [header.join(',')];
+  const mode = session.mode ?? 'baseline';
   for (const trial of session.trials) {
     const response = session.responses[trial.id] ?? '';
     const note = session.notes[trial.id] ?? '';
     rows.push([
       csvEscape(session.studentName),
       csvEscape(isoDatePart(session.date)),
+      csvEscape(mode),
       csvEscape(trial.letter),
       csvEscape(trial.case),
       csvEscape(trial.condition),

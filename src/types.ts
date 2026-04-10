@@ -3,6 +3,7 @@ export type CaseSet = 'upper' | 'lower' | 'both';
 export type AdminMode = 'by-letter' | 'by-condition';
 export type TrialResponse = 'correct' | 'incorrect' | 'nr';
 export type LetterCase = 'upper' | 'lower';
+export type SessionMode = 'baseline' | 'fluency';
 
 export interface Trial {
   id: string;
@@ -24,4 +25,7 @@ export interface Session {
   startedAt: string;
   completedAt?: string;
   endedEarly?: boolean;
+  mode: SessionMode;
+  selectedConditions?: Condition[];
+  selectedLetters?: string[];
 }

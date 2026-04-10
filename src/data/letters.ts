@@ -50,3 +50,19 @@ export function buildTrialList(
   }
   return trials;
 }
+
+export function buildFluencyTrialList(
+  letters: string[],
+  conditions: Condition[],
+  randomize: boolean,
+): Trial[] {
+  const ordered = randomize ? shuffle(letters) : [...letters];
+  const trials: Trial[] = [];
+  for (const letter of ordered) {
+    const c: LetterCase = letter === letter.toUpperCase() ? 'upper' : 'lower';
+    for (const condition of conditions) {
+      trials.push({ id: trialId(letter, condition), letter, case: c, condition });
+    }
+  }
+  return trials;
+}

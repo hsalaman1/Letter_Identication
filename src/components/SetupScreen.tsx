@@ -7,9 +7,6 @@ import { FontPreview } from '@/components/FontPreview';
 interface SetupScreenProps {
   onStart: (session: Session) => void;
   onViewHistory: () => void;
-  resumable?: Session | null;
-  onResume?: () => void;
-  onDiscardActive?: () => void;
 }
 
 function newSessionId(): string {
@@ -19,7 +16,7 @@ function newSessionId(): string {
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function SetupScreen({ onStart, onViewHistory, resumable, onResume, onDiscardActive }: SetupScreenProps) {
+export function SetupScreen({ onStart, onViewHistory }: SetupScreenProps) {
   const [studentName, setStudentName] = useState('');
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
@@ -44,6 +41,7 @@ export function SetupScreen({ onStart, onViewHistory, resumable, onResume, onDis
       responses: {},
       notes: {},
       startedAt: new Date().toISOString(),
+      mode: 'baseline',
     };
     onStart(session);
   };
@@ -54,20 +52,6 @@ export function SetupScreen({ onStart, onViewHistory, resumable, onResume, onDis
         <h1 className="text-3xl font-bold text-slate-900">Letter Identification Assessment</h1>
         <p className="mt-1 text-slate-600">Font Generalization Probe — Manuscript letters (Regular / Bold / Hollow)</p>
       </header>
-
-      {resumable && (
-        <div className="mb-6 rounded-lg border-2 border-amber-300 bg-amber-50 p-4">
-          <div className="font-semibold text-amber-900">Resume in-progress session?</div>
-          <div className="mt-1 text-sm text-amber-800">
-            Student: <b>{resumable.studentName}</b> — {resumable.trials.length} trials,{' '}
-            {Object.keys(resumable.responses).length} answered
-          </div>
-          <div className="mt-3 flex gap-3">
-            <Button size="md" variant="primary" onClick={onResume}>Resume</Button>
-            <Button size="md" variant="outline" onClick={onDiscardActive}>Discard</Button>
-          </div>
-        </div>
-      )}
 
       <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div>

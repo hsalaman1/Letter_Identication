@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Session, TrialResponse } from '@/types';
+import { HomeScreen } from '@/components/HomeScreen';
 import { SetupScreen } from '@/components/SetupScreen';
+import { FluencySetupScreen } from '@/components/FluencySetupScreen';
 import { TrialScreen } from '@/components/TrialScreen';
+import { FluencyTrialScreen } from '@/components/FluencyTrialScreen';
 import { ResultsScreen } from '@/components/ResultsScreen';
 import { SessionHistory } from '@/components/SessionHistory';
 import {
@@ -10,12 +13,12 @@ import {
   pushToHistory,
 } from '@/hooks/useSession';
 
-type Screen = 'setup' | 'trial' | 'results' | 'history';
+type Screen = 'home' | 'setup' | 'fluency-setup' | 'trial' | 'fluency-trial' | 'results' | 'history';
 
 const ACTIVE_KEY = 'letter-id:active';
 
 export function App() {
-  const [screen, setScreen] = useState<Screen>('setup');
+  const [screen, setScreen] = useState<Screen>('home');
   const [session, setSession] = useState<Session | null>(null);
   const [trialIndex, setTrialIndex] = useState(0);
   const [resumable, setResumable] = useState<Session | null>(null);
@@ -35,27 +38,38 @@ export function App() {
     localStorage.setItem(ACTIVE_KEY, JSON.stringify(session));
   }, [session]);
 
-  const handleStart = useCallback((s: Session) => {
+  // --- Start handlers ---
+
+  const handleStartBaseline = useCallback((s: Session) => {
     setSession(s);
     setTrialIndex(0);
     setResumable(null);
     setScreen('trial');
   }, []);
 
+  const handleStartFluency = useCallback((s: Session) => {
+    setSession(s);
+    setTrialIndex(0);
+    setResumable(null);
+    setScreen('fluency-trial');
+  }, []);
+
   const handleResume = useCallback(() => {
     if (!resumable) return;
     setSession(resumable);
-    // Jump to the first unanswered trial, if any.
     const firstUnanswered = resumable.trials.findIndex(t => resumable.responses[t.id] === undefined);
     setTrialIndex(firstUnanswered >= 0 ? firstUnanswered : 0);
+    const mode = resumable.mode ?? 'baseline';
     setResumable(null);
-    setScreen('trial');
+    setScreen(mode === 'fluency' ? 'fluency-trial' : 'trial');
   }, [resumable]);
 
   const handleDiscardActive = useCallback(() => {
     clearActive();
     setResumable(null);
   }, []);
+
+  // --- Baseline trial handlers ---
 
   const handleRecord = useCallback((trialId: string, response: TrialResponse) => {
     setSession(prev => {
@@ -83,6 +97,35 @@ export function App() {
     });
   }, []);
 
+  // --- Fluency trial handler (record + auto-advance) ---
+
+  const handleRecordAndAdvance = useCallback((trialId: string, response: TrialResponse) => {
+    setSession(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, responses: { ...prev.responses, [trialId]: response } };
+      // Find current trial index to know if we're at the last one.
+      const currentIdx = updated.trials.findIndex(t => t.id === trialId);
+      if (currentIdx >= 0 && currentIdx < updated.trials.length - 1) {
+        // Auto-advance to next.
+        setTrialIndex(currentIdx + 1);
+      } else {
+        // Last trial — auto-finish.
+        const completed: Session = {
+          ...updated,
+          completedAt: new Date().toISOString(),
+          endedEarly: false,
+        };
+        pushToHistory(completed);
+        clearActive();
+        setScreen('results');
+        return completed;
+      }
+      return updated;
+    });
+  }, []);
+
+  // --- End / complete ---
+
   const handleEnd = useCallback(() => {
     setSession(prev => {
       if (!prev) return prev;
@@ -102,7 +145,7 @@ export function App() {
   const handleStartNew = useCallback(() => {
     setSession(null);
     setTrialIndex(0);
-    setScreen('setup');
+    setScreen('home');
   }, []);
 
   const handleViewHistorySession = useCallback((s: Session) => {
@@ -110,14 +153,35 @@ export function App() {
     setScreen('results');
   }, []);
 
-  if (screen === 'setup') {
+  // --- Rendering ---
+
+  if (screen === 'home') {
     return (
-      <SetupScreen
-        onStart={handleStart}
+      <HomeScreen
+        onBaseline={() => setScreen('setup')}
+        onFluency={() => setScreen('fluency-setup')}
         onViewHistory={() => setScreen('history')}
         resumable={resumable}
         onResume={handleResume}
         onDiscardActive={handleDiscardActive}
+      />
+    );
+  }
+
+  if (screen === 'setup') {
+    return (
+      <SetupScreen
+        onStart={handleStartBaseline}
+        onViewHistory={() => setScreen('history')}
+      />
+    );
+  }
+
+  if (screen === 'fluency-setup') {
+    return (
+      <FluencySetupScreen
+        onStart={handleStartFluency}
+        onBack={() => setScreen('home')}
       />
     );
   }
@@ -136,6 +200,18 @@ export function App() {
     );
   }
 
+  if (screen === 'fluency-trial' && session) {
+    return (
+      <FluencyTrialScreen
+        session={session}
+        index={trialIndex}
+        onRecordAndAdvance={handleRecordAndAdvance}
+        onPrev={handlePrev}
+        onFinish={handleEnd}
+      />
+    );
+  }
+
   if (screen === 'results' && session) {
     return (
       <ResultsScreen
@@ -149,7 +225,7 @@ export function App() {
   if (screen === 'history') {
     return (
       <SessionHistory
-        onBack={() => setScreen(session ? 'results' : 'setup')}
+        onBack={() => setScreen(session ? 'results' : 'home')}
         onView={handleViewHistorySession}
       />
     );
