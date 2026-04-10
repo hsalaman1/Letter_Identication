@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { Condition, Session } from '@/types';
 import { loadHistory, saveHistory } from '@/hooks/useSession';
 import { computeResults } from '@/lib/scoring';
-import { downloadCsv, downloadJson } from '@/lib/export';
+import { downloadCsv, downloadJson, downloadPdf } from '@/lib/export';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -83,6 +83,9 @@ export function SessionHistory({ onBack, onView }: SessionHistoryProps) {
                   <div className="flex flex-wrap gap-2">
                     <Button variant="primary" size="md" onClick={() => onView(s)}>
                       View
+                    </Button>
+                    <Button variant="outline" size="md" onClick={() => downloadPdf(s)}>
+                      PDF
                     </Button>
                     <Button variant="outline" size="md" onClick={() => downloadCsv(s)}>
                       CSV

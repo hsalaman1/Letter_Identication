@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { Condition, Session } from '@/types';
 import { computeResults } from '@/lib/scoring';
-import { downloadCsv, downloadJson } from '@/lib/export';
+import { downloadCsv, downloadJson, downloadPdf } from '@/lib/export';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -187,7 +187,10 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
       )}
 
       <section className="flex flex-wrap gap-3">
-        <Button variant="primary" size="lg" onClick={() => downloadCsv(session)}>
+        <Button variant="primary" size="lg" onClick={() => downloadPdf(session)}>
+          Export PDF
+        </Button>
+        <Button variant="outline" size="lg" onClick={() => downloadCsv(session)}>
           Export CSV
         </Button>
         <Button variant="outline" size="lg" onClick={() => downloadJson(session)}>
