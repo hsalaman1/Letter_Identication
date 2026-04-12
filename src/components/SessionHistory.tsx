@@ -2,8 +2,9 @@ import { useState } from 'react';
 import type { Condition, Session } from '@/types';
 import { loadHistory, saveHistory } from '@/hooks/useSession';
 import { computeResults } from '@/lib/scoring';
-import { downloadCsv, downloadJson, downloadPdf } from '@/lib/export';
+import { downloadCsv, downloadJson, downloadPdf, downloadWord } from '@/lib/export';
 import { Button } from '@/components/ui/button';
+import { ConfirmDialog } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 
 interface SessionHistoryProps {
@@ -13,11 +14,13 @@ interface SessionHistoryProps {
 
 export function SessionHistory({ onBack, onView }: SessionHistoryProps) {
   const [sessions, setSessions] = useState<Session[]>(() => loadHistory());
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const handleDelete = (id: string) => {
     const next = sessions.filter(s => s.id !== id);
     setSessions(next);
     saveHistory(next);
+    setDeleteId(null);
   };
 
   return (
@@ -87,13 +90,16 @@ export function SessionHistory({ onBack, onView }: SessionHistoryProps) {
                     <Button variant="outline" size="md" onClick={() => downloadPdf(s)}>
                       PDF
                     </Button>
+                    <Button variant="outline" size="md" onClick={() => downloadWord(s)}>
+                      Word
+                    </Button>
                     <Button variant="outline" size="md" onClick={() => downloadCsv(s)}>
                       CSV
                     </Button>
                     <Button variant="outline" size="md" onClick={() => downloadJson(s)}>
                       JSON
                     </Button>
-                    <Button variant="danger" size="md" onClick={() => handleDelete(s.id)}>
+                    <Button variant="danger" size="md" onClick={() => setDeleteId(s.id)}>
                       Delete
                     </Button>
                   </div>
@@ -103,6 +109,15 @@ export function SessionHistory({ onBack, onView }: SessionHistoryProps) {
           })}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={open => { if (!open) setDeleteId(null); }}
+        title="Delete session?"
+        description="This will permanently remove the session from your history. This action cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={() => { if (deleteId) handleDelete(deleteId); }}
+      />
     </div>
   );
 }

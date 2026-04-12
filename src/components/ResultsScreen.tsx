@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import type { Condition, Session } from '@/types';
 import { computeResults } from '@/lib/scoring';
-import { downloadCsv, downloadJson, downloadPdf } from '@/lib/export';
+import { downloadCsv, downloadJson, downloadPdf, downloadWord } from '@/lib/export';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -17,7 +17,7 @@ function fmt(n: number): string {
 
 export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScreenProps) {
   const results = useMemo(() => computeResults(session), [session]);
-  const { perCondition, filled, hollow, gap, flags, errors } = results;
+  const { perCondition, perLetter, filled, hollow, gap, flags, errors } = results;
 
   const mode = session.mode ?? 'baseline';
   const caseSet = session.caseSet;
@@ -114,6 +114,70 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
       </section>
 
       <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-xl font-bold text-slate-900">Score by letter</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b-2 border-slate-200">
+                <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Letter</th>
+                {caseSet === 'both' && (
+                  <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Case</th>
+                )}
+                {testedConditions.map(c => (
+                  <th key={c} className="py-2 pr-4 text-center text-sm font-semibold capitalize text-slate-600">{c}</th>
+                ))}
+                <th className="py-2 pr-4 text-sm font-semibold text-slate-600">Score</th>
+                <th className="py-2 pr-4 text-sm font-semibold text-slate-600">%</th>
+              </tr>
+            </thead>
+            <tbody>
+              {perLetter.map(pl => {
+                const allCorrect = pl.percent === 100;
+                const allWrong = pl.correct === 0 && pl.total > 0;
+                return (
+                  <tr
+                    key={`${pl.case}-${pl.letter}`}
+                    className={cn(
+                      'border-b border-slate-100',
+                      allWrong && 'bg-red-50',
+                    )}
+                  >
+                    <td className="py-2 pr-4 font-mono text-lg font-semibold text-slate-900">{pl.letter}</td>
+                    {caseSet === 'both' && (
+                      <td className="py-2 pr-4 text-sm capitalize text-slate-600">{pl.case}</td>
+                    )}
+                    {testedConditions.map(c => {
+                      const r = pl.conditionResults[c];
+                      return (
+                        <td key={c} className="py-2 pr-4 text-center">
+                          {r === 'correct' && <span className="text-emerald-600 font-bold">&#10003;</span>}
+                          {r === 'incorrect' && <span className="text-red-600 font-bold">&#10007;</span>}
+                          {r === 'nr' && <span className="text-zinc-400 font-semibold">NR</span>}
+                          {r === 'unanswered' && <span className="text-slate-300">—</span>}
+                          {r === undefined && <span className="text-slate-300">—</span>}
+                        </td>
+                      );
+                    })}
+                    <td className="py-2 pr-4 tabular-nums text-slate-900">
+                      {pl.correct}/{pl.total}
+                    </td>
+                    <td className={cn(
+                      'py-2 pr-4 tabular-nums font-semibold',
+                      allCorrect && 'text-emerald-700',
+                      allWrong && 'text-red-700',
+                      !allCorrect && !allWrong && 'text-slate-900',
+                    )}>
+                      {fmt(pl.percent)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-xl font-bold text-slate-900">Pattern flags</h2>
 
         {!hasAllConditions && (
@@ -189,6 +253,9 @@ export function ResultsScreen({ session, onStartNew, onViewHistory }: ResultsScr
       <section className="flex flex-wrap gap-3">
         <Button variant="primary" size="lg" onClick={() => downloadPdf(session)}>
           Export PDF
+        </Button>
+        <Button variant="primary" size="lg" onClick={() => downloadWord(session)}>
+          Export Word
         </Button>
         <Button variant="outline" size="lg" onClick={() => downloadCsv(session)}>
           Export CSV

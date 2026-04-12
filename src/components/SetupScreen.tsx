@@ -3,17 +3,11 @@ import type { AdminMode, CaseSet, Session } from '@/types';
 import { buildTrialList } from '@/data/letters';
 import { Button } from '@/components/ui/button';
 import { FontPreview } from '@/components/FontPreview';
+import { newSessionId } from '@/lib/utils';
 
 interface SetupScreenProps {
   onStart: (session: Session) => void;
   onViewHistory: () => void;
-}
-
-function newSessionId(): string {
-  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-    return crypto.randomUUID();
-  }
-  return `s_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function SetupScreen({ onStart, onViewHistory }: SetupScreenProps) {
