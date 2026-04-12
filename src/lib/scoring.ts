@@ -1,4 +1,4 @@
-import type { Condition, Session, Trial, TrialResponse } from '@/types';
+import type { Condition, LetterCase, Session, Trial, TrialResponse } from '@/types';
 
 export interface ConditionScore {
   upper: number;
@@ -9,8 +9,18 @@ export interface ConditionScore {
   percent: number;
 }
 
+export interface PerLetterScore {
+  letter: string;
+  case: LetterCase;
+  conditionResults: Partial<Record<Condition, TrialResponse | 'unanswered'>>;
+  correct: number;
+  total: number;
+  percent: number;
+}
+
 export interface Results {
   perCondition: Record<Condition, ConditionScore>;
+  perLetter: PerLetterScore[];
   filled: { correct: number; total: number; percent: number };
   hollow: { correct: number; total: number; percent: number };
   gap: number;
@@ -120,6 +130,33 @@ export function computeResults(session: Session): Results {
     caseSpecific = Math.abs(upperPct - lowerPct) >= 15;
   }
 
+  // Per-letter scores: group by letter+case, aggregate across conditions.
+  const letterKeys: string[] = [];
+  const letterKeySet = new Set<string>();
+  for (const t of trials) {
+    const key = `${t.case}:${t.letter}`;
+    if (!letterKeySet.has(key)) {
+      letterKeySet.add(key);
+      letterKeys.push(key);
+    }
+  }
+
+  const perLetter: PerLetterScore[] = letterKeys.map(key => {
+    const [c, letter] = key.split(':') as [LetterCase, string];
+    const forLetter = trials.filter(t => t.case === c && t.letter === letter);
+    const conditionResults: Partial<Record<Condition, TrialResponse | 'unanswered'>> = {};
+    let correct = 0;
+    let total = 0;
+    for (const t of forLetter) {
+      const r = responses[t.id];
+      conditionResults[t.condition] = r ?? 'unanswered';
+      total++;
+      if (r === 'correct') correct++;
+    }
+    const percent = total > 0 ? (correct / total) * 100 : 0;
+    return { letter, case: c, conditionResults, correct, total, percent };
+  });
+
   const errors = trials
     .filter(t => {
       const r = responses[t.id];
@@ -135,6 +172,7 @@ export function computeResults(session: Session): Results {
 
   return {
     perCondition,
+    perLetter,
     filled: { correct: filledCorrect, total: filledDenom, percent: filledPercent },
     hollow: { correct: hollowCorrect, total: hollowDenom, percent: hollowPercent },
     gap,

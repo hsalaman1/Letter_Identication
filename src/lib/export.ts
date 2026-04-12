@@ -13,7 +13,7 @@ import {
   ShadingType,
 } from 'docx';
 import { saveAs } from 'file-saver';
-import type { Condition, Session } from '@/types';
+import type { Condition, Session, TrialResponse } from '@/types';
 import { computeResults } from '@/lib/scoring';
 
 function slug(name: string): string {
@@ -34,6 +34,13 @@ function download(filename: string, text: string, mime: string): void {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+function fmtCondResult(r: TrialResponse | 'unanswered' | undefined): string {
+  if (r === 'correct') return '\u2713';
+  if (r === 'incorrect') return '\u2717';
+  if (r === 'nr') return 'NR';
+  return '\u2014';
 }
 
 function csvEscape(value: string): string {
@@ -166,6 +173,43 @@ export function downloadPdf(session: Session): void {
     doc.text(`Filled − Hollow Gap:  ${gapStr}${flags.fillDependent ? '  *** FILL-DEPENDENT FLAG ***' : ''}`, marginL, y);
     y += 20;
   }
+
+  // --- Score by Letter table ---
+  if (y > 550) { doc.addPage(); y = 40; }
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Score by Letter', marginL, y);
+  y += 4;
+
+  const letterHead: string[] = ['Letter'];
+  if (caseSet === 'both') letterHead.push('Case');
+  for (const c of testedConditions) letterHead.push(c.charAt(0).toUpperCase() + c.slice(1));
+  letterHead.push('Score', '%');
+
+  const letterBody = results.perLetter.map(pl => {
+    const row: string[] = [pl.letter];
+    if (caseSet === 'both') row.push(pl.case);
+    for (const c of testedConditions) row.push(fmtCondResult(pl.conditionResults[c]));
+    row.push(`${pl.correct}/${pl.total}`, `${pl.percent.toFixed(0)}%`);
+    return row;
+  });
+
+  autoTable(doc, {
+    startY: y,
+    head: [letterHead],
+    body: letterBody,
+    theme: 'grid',
+    margin: { left: marginL, right: marginR },
+    headStyles: { fillColor: [30, 41, 59], fontSize: 8 },
+    bodyStyles: { fontSize: 8, cellPadding: 3 },
+    styles: { cellPadding: 3 },
+    columnStyles: {
+      0: { fontStyle: 'bold', cellWidth: 40 },
+    },
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  y = ((doc as any).lastAutoTable?.finalY as number) ?? y + 60;
+  y += 16;
 
   // --- Pattern flags ---
   doc.setFontSize(12);
@@ -395,6 +439,37 @@ export async function downloadWord(session: Session): Promise<void> {
       spacing: { after: 100 },
     }));
   }
+
+  // --- Score by Letter table ---
+  sections.push(new Paragraph({
+    heading: HeadingLevel.HEADING_2,
+    children: [new TextRun({ text: 'Score by Letter', bold: true, font: 'Calibri' })],
+    spacing: { before: 300, after: 100 },
+  }));
+
+  const letterHead: string[] = ['Letter'];
+  if (caseSet === 'both') letterHead.push('Case');
+  for (const c of testedConditions) letterHead.push(c.charAt(0).toUpperCase() + c.slice(1));
+  letterHead.push('Score', '%');
+
+  const letterHeaderRow = new TableRow({
+    children: letterHead.map(h => wordHeaderCell(h)),
+  });
+
+  const letterBodyRows = results.perLetter.map(pl => {
+    const cells: string[] = [pl.letter];
+    if (caseSet === 'both') cells.push(pl.case);
+    for (const c of testedConditions) cells.push(fmtCondResult(pl.conditionResults[c]));
+    cells.push(`${pl.correct}/${pl.total}`, `${pl.percent.toFixed(0)}%`);
+    return new TableRow({
+      children: cells.map((text, i) => wordCell(text, i === 0)),
+    });
+  });
+
+  sections.push(new Table({
+    rows: [letterHeaderRow, ...letterBodyRows],
+    width: { size: 100, type: WidthType.PERCENTAGE },
+  }));
 
   // --- Pattern flags ---
   sections.push(new Paragraph({
