@@ -3,6 +3,8 @@ import type { CaseSet, Condition, Session } from '@/types';
 import { UPPER, LOWER, buildFluencyTrialList } from '@/data/letters';
 import { Button } from '@/components/ui/button';
 import { FontPreview } from '@/components/FontPreview';
+import { StudentNameField } from '@/components/StudentNameField';
+import { saveClientName } from '@/hooks/useSession';
 import { cn, newSessionId } from '@/lib/utils';
 
 interface FluencySetupScreenProps {
@@ -83,12 +85,14 @@ export function FluencySetupScreen({ onStart, onBack }: FluencySetupScreenProps)
 
   const handleStart = () => {
     if (!canStart) return;
+    const trimmedName = studentName.trim();
+    saveClientName(trimmedName);
     const condArr = [...conditions];
     const nowIso = new Date(`${date}T${new Date().toTimeString().slice(0, 8)}`).toISOString();
     const trials = buildFluencyTrialList(letters, condArr, randomize);
     const session: Session = {
       id: newSessionId(),
-      studentName: studentName.trim(),
+      studentName: trimmedName,
       date: nowIso,
       caseSet,
       adminMode: 'by-letter',
@@ -116,16 +120,7 @@ export function FluencySetupScreen({ onStart, onBack }: FluencySetupScreenProps)
 
       <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         {/* Student name */}
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-slate-700">Student name</label>
-          <input
-            type="text"
-            value={studentName}
-            onChange={e => setStudentName(e.target.value)}
-            placeholder="e.g. Sam Rivera"
-            className="w-full rounded-lg border-2 border-slate-300 px-4 py-3 text-lg focus:border-blue-600 focus:outline-none"
-          />
-        </div>
+        <StudentNameField value={studentName} onChange={setStudentName} theme="blue" />
 
         {/* Date */}
         <div>

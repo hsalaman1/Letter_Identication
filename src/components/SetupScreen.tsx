@@ -3,6 +3,8 @@ import type { AdminMode, CaseSet, Session } from '@/types';
 import { buildTrialList } from '@/data/letters';
 import { Button } from '@/components/ui/button';
 import { FontPreview } from '@/components/FontPreview';
+import { StudentNameField } from '@/components/StudentNameField';
+import { saveClientName } from '@/hooks/useSession';
 import { newSessionId } from '@/lib/utils';
 
 interface SetupScreenProps {
@@ -22,11 +24,13 @@ export function SetupScreen({ onStart, onViewHistory }: SetupScreenProps) {
 
   const handleStart = () => {
     if (!canStart || !caseSet) return;
+    const trimmedName = studentName.trim();
+    saveClientName(trimmedName);
     const nowIso = new Date(`${date}T${new Date().toTimeString().slice(0, 8)}`).toISOString();
     const trials = buildTrialList(caseSet, adminMode, randomize);
     const session: Session = {
       id: newSessionId(),
-      studentName: studentName.trim(),
+      studentName: trimmedName,
       date: nowIso,
       caseSet,
       adminMode,
@@ -48,16 +52,7 @@ export function SetupScreen({ onStart, onViewHistory }: SetupScreenProps) {
       </header>
 
       <div className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div>
-          <label className="mb-2 block text-sm font-semibold text-slate-700">Student name</label>
-          <input
-            type="text"
-            value={studentName}
-            onChange={e => setStudentName(e.target.value)}
-            placeholder="e.g. Sam Rivera"
-            className="w-full rounded-lg border-2 border-slate-300 px-4 py-3 text-lg focus:border-slate-900 focus:outline-none"
-          />
-        </div>
+        <StudentNameField value={studentName} onChange={setStudentName} theme="slate" />
 
         <div>
           <label className="mb-2 block text-sm font-semibold text-slate-700">Date</label>

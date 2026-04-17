@@ -3,6 +3,7 @@ import type { Session, TrialResponse } from '@/types';
 
 export const ACTIVE_KEY = 'letter-id:active';
 const HISTORY_KEY = 'letter-id:history';
+const CLIENTS_KEY = 'letter-id:clients';
 
 export function loadActive(): Session | null {
   try {
@@ -38,6 +39,47 @@ export function pushToHistory(session: Session): void {
   const current = loadHistory();
   const next = [session, ...current.filter(s => s.id !== session.id)];
   saveHistory(next);
+}
+
+function readStoredClientNames(): string[] {
+  try {
+    const raw = localStorage.getItem(CLIENTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((n): n is string => typeof n === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function dedupeNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of names) {
+    const name = raw.trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(name);
+  }
+  return result;
+}
+
+export function loadClientNames(): string[] {
+  // Union stored list with names from history so pre-existing sessions appear.
+  const stored = readStoredClientNames();
+  const fromHistory = loadHistory().map(s => s.studentName);
+  return dedupeNames([...stored, ...fromHistory]);
+}
+
+export function saveClientName(name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  const stored = readStoredClientNames();
+  const next = dedupeNames([trimmed, ...stored]);
+  localStorage.setItem(CLIENTS_KEY, JSON.stringify(next));
 }
 
 export function useActiveSession(initial: Session) {
