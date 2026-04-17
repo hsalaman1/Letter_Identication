@@ -19,7 +19,7 @@ const ALL_CONDITIONS: { value: Condition; label: string }[] = [
 ];
 
 export function FluencySetupScreen({ onStart, onBack }: FluencySetupScreenProps) {
-  const [studentName, setStudentName] = useState('');
+  const [studentName, setStudentName] = useState('AWH');
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [caseSet, setCaseSet] = useState<CaseSet>('upper');

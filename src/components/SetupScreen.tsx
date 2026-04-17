@@ -13,7 +13,7 @@ interface SetupScreenProps {
 }
 
 export function SetupScreen({ onStart, onViewHistory }: SetupScreenProps) {
-  const [studentName, setStudentName] = useState('');
+  const [studentName, setStudentName] = useState('AWH');
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [caseSet, setCaseSet] = useState<CaseSet | null>(null);
